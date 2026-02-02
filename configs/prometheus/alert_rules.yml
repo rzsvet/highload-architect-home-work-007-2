@@ -1,0 +1,56 @@
+groups:
+  - name: dialog_service_alerts
+    rules:
+      - alert: HighErrorRate
+        expr: rate(dialog_api_requests_total{status=~"5.."}[5m]) / rate(dialog_api_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate in dialog service"
+          description: "Error rate is {{ $value | humanizePercentage }} for 5 minutes"
+      
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(dialog_api_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High response time in dialog service"
+          description: "95th percentile response time is {{ $value }} seconds"
+      
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory usage is high"
+          description: "Redis memory usage is {{ $value | humanizePercentage }}"
+      
+      - alert: LowUserRetention
+        expr: dialog_user_retention_ratio < 0.3
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low user retention rate"
+          description: "User retention rate is {{ $value | humanizePercentage }}"
+      
+      - alert: LowAssistantResponseRate
+        expr: dialog_assistant_response_rate < 0.7
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low assistant response rate"
+          description: "Assistant response rate is {{ $value | humanizePercentage }}"
+      
+      - alert: NoNewUsers
+        expr: rate(dialog_new_users_total[1h]) == 0
+        for: 1h
+        labels:
+          severity: info
+        annotations:
+          summary: "No new users in the last hour"
+          description: "No new users have been created in the last hour"

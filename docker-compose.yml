@@ -1,0 +1,108 @@
+services:
+  dialog-service:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    healthcheck:
+      test: ["CMD", "curl", "http://127.0.0.1:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  dialog-service-load-test:
+    build: .
+    environment:
+      - APP_URL=http://dialog-service:8000
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+      dialog-service:
+        condition: service_healthy
+    command: python3 load_test.py
+
+  dialog-service-monitoring:
+    build: .
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+      dialog-service:
+        condition: service_healthy
+    command: python3 monitor.py
+
+  redis:
+    image: redis:8.4.0-alpine3.22
+    # ports:
+    #   - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    command: redis-server --appendonly yes
+
+  prometheus:
+    image: prom/prometheus:v3.9.1
+    # ports:
+    #   - "9090:9090"
+    volumes:
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9090"]
+      interval: 10s
+      timeout: 15s
+      retries: 10
+      start_period: 40s
+    depends_on:
+      redis:
+        condition: service_healthy
+      dialog-service:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:12.4.0-21419697389-ubuntu
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./configs/grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.79.0
+    # ports:
+    #   - 9121:9121
+    restart: unless-stopped
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis_data:
+  prometheus_data:
+  grafana_data:
